@@ -24,16 +24,12 @@ enum SERIAL_REQUEST {     //Display data
   ERRORS,
 };
 
-
 enum DATA_FLAGS {
   NO_INFORMATION,
   DATA_GOOD,
 };
-
 DATA_FLAGS dataCorruptionFlag = NO_INFORMATION;
 
-
-byte c;
 int DATA_CORRUPTED;
 byte magicByte;
 byte controllerID;
@@ -41,7 +37,6 @@ byte packetId;
 byte msgByte_low;
 byte msgByte_high;
 byte crcVal_received;
-byte crcVal_calculated;
 
 static uint32_t time_for_the_next_message = millis();     // Request loop delay
 static uint32_t time_for_the_next_loop = millis();
@@ -83,67 +78,67 @@ void setup() {
   lcd.print ("NO DATA");
 }
 
-
-void Warning_parser(uint8_t Warning_code = (msgByte_low))  {        //Warning parser function is working
+void Warning_parser(uint8_t Warning_code = (msgByte_low))  {        //Warning_code values are good
 
   switch (Warning_code) {
 
     case 0x01:
-
       time_now = millis();
 
-      while (millis() < time_now + period) {
+      if (time_now > time_for_the_next_loop) {
 
         lcd.setCursor (0, 1);
         lcd.print("      ");
       }
+      time_for_the_next_loop += 100;
 
-      while (millis() < time_now + period) {
+      if (time_now > time_for_the_next_loop) {
 
         lcd.setCursor (0, 1);
         lcd.print("Volts:");
       }
+      time_for_the_next_loop += 100;
 
       lcd.setCursor (0, 1);
       lcd.print("Volts:");
       break;
 
     case 0x02:
-
       time_now = millis();
 
-      while (millis() < time_now + period) {
+      if (time_now > time_for_the_next_loop) {
+
 
         lcd.setCursor (10, 0);
         lcd.print("     ");
       }
+      time_for_the_next_loop += 100;
 
-      while (millis() < time_now + period) {
+      if (time_now > time_for_the_next_loop) {
 
         lcd.setCursor (10, 0);
         lcd.print("Amps:");
       }
+      time_for_the_next_loop += 100;
 
       lcd.setCursor (10, 0);
       lcd.print("Amps:");
       break;
 
     case 0x04:
-
       time_now = millis();
 
-      while (millis() < time_now + period) {
-
+      if (time_now > time_for_the_next_loop) {
         lcd.setCursor (10, 2);
         lcd.print("      ");
       }
-
-      while (millis() < time_now + period) {
+      time_for_the_next_loop += 100;
+      if (time_now > time_for_the_next_loop) {
 
         lcd.setCursor (0, 2);
         lcd.print("ESC:");
       }
-
+      time_for_the_next_loop += 100;
       lcd.setCursor (10, 2);
       lcd.print("ESC:");
       break;
@@ -151,88 +146,74 @@ void Warning_parser(uint8_t Warning_code = (msgByte_low))  {        //Warning pa
     case 0x10:
       time_now = millis();
 
-      while (millis() < time_now + period) {
+      if (time_now > time_for_the_next_loop) {
 
         lcd.setCursor (0, 2);
         lcd.print("      ");
       }
-
-      while (millis() < time_now + period) {
+      time_for_the_next_loop += 100;
+      if (time_now > time_for_the_next_loop) {
 
         lcd.setCursor (0, 2);
         lcd.print("Motor:");
       }
+      time_for_the_next_loop += 100;
 
       lcd.setCursor (0, 2);
       lcd.print("Motor:");
   }
 }
 
-void Error_parser(uint8_t Error_code = (msgByte_low)) {        //Error parser function is working
+void Error_parser(uint8_t Error_code = (msgByte_low)) {        //Error_code vales are good
 
   switch (Error_code) {
 
     case 0x02:
-
       lcd.setCursor (0, 3);
       lcd.print("               ");
-
       lcd.setCursor (0, 3);
       lcd.print("NEUTRAL?");
       break;
 
     case 0x08:
-
       lcd.setCursor (0, 3);
       lcd.print("               ");
-
       lcd.setCursor (0, 3);
       lcd.print("MEMORY FAIL!");
       break;
 
     case 0x20:
-
       lcd.setCursor (0, 3);
       lcd.print("               ");
-
       lcd.setCursor (0, 3);
       lcd.print("HAll SENSOR!");
       break;
 
     case 0x40:
-
       lcd.setCursor (0, 3);
       lcd.print("               ");
-
       lcd.setCursor (0, 3);
       lcd.print("12V POWER!");
       break;
 
     case 0x80:
-
       lcd.setCursor (0, 3);
       lcd.print("               ");
-
       lcd.setCursor (0, 3);
       lcd.print("HALL RESET");
       break;
 
     case 0x00:
-
       lcd.setCursor (0, 3);
       lcd.print("               ");
-
       lcd.setCursor (0, 3);
       lcd.print("MOTOR TEMP!");
   }
 }
 
-void DisplayData() {     //Send data to diplay
-
-  uint8_t  DataVal = (msgByte_low) + (msgByte_high * 256);
+void DisplayData (uint8_t  DataVal = (msgByte_low) + (msgByte_high * 256)) {     //Send data to display
 
   switch (packetId) {
-
     case 0x01:
 
       //Print Volts
@@ -293,32 +274,31 @@ void DisplayData() {     //Send data to diplay
       lcd.print(PwrReq_Val);
       break;
 
-    case 0x0a:
+      /*case 0x0a:     Add flash function later
 
-      //Run Warning function
-      lcd.setCursor (0, 3);
-      lcd.print("MOTOR TEMP!");
-      Warning_parser();
-      break;
+        //Run Warning function
+        lcd.setCursor (0, 3);
+        lcd.print("MOTOR TEMP!");
+        Warning_parser();
+        break;
 
-    case 0x0b:
+        case 0x0b:
 
-      //Run Error function
-      Error_parser();
+        //Run Error function
+        Error_parser();*/
   }
 }
 
-void CRC_check () {
+void CRC_check (byte c) {     //CRC check
 
-  crcVal_calculated = (((controllerID ^ packetId) ^ msgByte_high) ^ msgByte_low);
+  byte crcVal_calculated = (((controllerID ^ packetId) ^ msgByte_high) ^ msgByte_low);
 
   if (crcVal_received == crcVal_calculated) {
-    dataCorruptionFlag = DATA_GOOD;
-    DisplayData();      //Run data display loop
+
+    DisplayData(c);      //Run data display loop
 
   } else {      //CRC failed
 
-    dataCorruptionFlag = DATA_CORRUPTED;
     DATA_CORRUPTED ++;
 
     if (DATA_CORRUPTED < 100) {
@@ -330,95 +310,68 @@ void CRC_check () {
   }
 }
 
-void processInput ()        // Response parser
-  {
-        
-   switch (state) {           
+void processInput (byte c) {      // Response parser
 
-    case FSM_MAGIC_BYTE:
-      // Check if the first byte is the magic byte
-
-      if (c == 0xfe) {      // It is! Go on to the next state
-        
+  switch (state) {
+    case FSM_MAGIC_BYTE:       // Check if the first byte is the magic byte
+      if (c == 0xfe) {
         state = FSM_CONTROLLER_ID;
-       
       }
       break;
-    
- case FSM_CONTROLLER_ID:
-        // Check if the second byte is a valid controller
-  
-        if (c == 0x00) {
-          // It is! Go on to the third byte.
-Serial.print ("Next byte: ");
-    Serial.print (c, HEX);
-    Serial.print (" ");
-         
-          state = FSM_PACKET_ID;
 
-        } else {
+    case FSM_CONTROLLER_ID:     // Check if the second byte is a valid controller
+      if (c == 0x00) {
+        state = FSM_PACKET_ID;
 
-          // It isn't, return to beginning
-          state = FSM_MAGIC_BYTE;
-        }
-        break;
-        
-    case FSM_PACKET_ID:
-      // Check if the third byte is a valid packet ID
- 
+      } else {
+        state = FSM_MAGIC_BYTE;      // It isn't, return to beginning
+      }
+      break;
+
+    case FSM_PACKET_ID:      // Check if the third byte is a valid packet ID
       if (c <= 0x0b) {
         packetId = c;
+        Serial.print ("Next byte: ");
+      Serial.print (packetId, HEX);
+      Serial.print (" ");
         state = FSM_BYTE_LOW;
-        
       }
 
       else {
-
-        // It isn't, return to beginning
-        state = FSM_MAGIC_BYTE;
+        state = FSM_MAGIC_BYTE;     // It isn't, return to beginning
       }
       break;
 
     case FSM_BYTE_LOW:
-      // Store the fourth byte and proceed to the fifth
-
-      msgByte_low = c;
+      msgByte_low = c;      // Store the fourth byte and proceed to the fifth
       state = FSM_BYTE_HIGH;
-      c = Serial.read();
+      break;
+
 
     case FSM_BYTE_HIGH:
-      // Store the fifth byte and proceed to the CRC check
-
-      msgByte_high = c;
+      msgByte_high = c;     // Store the fifth byte and proceed to the CRC check
       state = FSM_CRC_CHECK;
-      c = Serial.read();
+      break;
 
     case FSM_CRC_CHECK:
-
       crcVal_received = c;
-      void CRC_check();     //Run CRC checker
+      CRC_check(c);     //Run CRC checker
   }
- }
+}
 
-  
-void loop() {         //Main loop
-  
+void loop () {         //Main loop
 
   //Request loop goes here
 
   lcd.setCursor(0, 3);
   lcd.print ("NO DATA");
 
-  //Check to see if anything is available in the serial receive buffer
-  while (Serial.available() > 0)
-  {
-    c = Serial.read ();
+  while (Serial.available() > 0) {   //Check to see if anything is available in the serial receive buffer
+
+    byte c = Serial.read ();
+
     lcd.setCursor(0, 3);      //Clear display warning field
     lcd.print("           ");
-    processInput ();
+    processInput (c);
   }
 }
-
-
-
- 
