@@ -1,6 +1,6 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
-LiquidCrystal_I2C lcd(0x27, 20, 4); // set the LCD address to 0x27 for a 16 chars and 2 line display
+LiquidCrystal_I2C lcd(0x27, 20, 4);
 
 enum FSM_STATES {     //Byte parser
   FSM_MAGIC_BYTE,
@@ -10,7 +10,6 @@ enum FSM_STATES {     //Byte parser
   FSM_BYTE_HIGH,
   FSM_CRC_CHECK,
 };
-FSM_STATES state = FSM_MAGIC_BYTE;
 
 enum SERIAL_REQUEST {     //Display data
   VOLTAGE,
@@ -28,20 +27,16 @@ enum DATA_FLAGS {
   NO_INFORMATION,
   DATA_GOOD,
 };
-DATA_FLAGS dataCorruptionFlag = NO_INFORMATION;
 
-int DATA_CORRUPTED;
-byte magicByte;
-byte controllerID;
-byte packetId;
-byte msgByte_low;
-byte msgByte_high;
-byte crcVal_received;
+uint8_t magic_Byte;     //Incoming bytes
+uint8_t controller_Id;
+uint8_t packet_Id;
+uint8_t msgByte_low;
+uint8_t msgByte_high;
+uint8_t Data_Corrupted;
+uint8_t crcVal_calculated;
 
-static uint32_t time_for_the_next_message = millis();     // Request loop delay
-static uint32_t time_for_the_next_loop = millis();
-
-int period = 500;     // Warning delay
+uint16_t blinkPeriod = 500;     // Warning delay
 unsigned long time_now = 0;
 
 uint8_t query1[] = {254, 00, 1, 1};     //Send request arrays
@@ -54,31 +49,10 @@ uint8_t query7[] = {254, 00, 9, 9};
 uint8_t query8[] = {254, 00, 10, 10};
 uint8_t query9[] = {254, 00, 11, 11};
 
-char value[3];
+void Warning_parser(uint16_t Warning_code)  {        //Warning_code values are good
 
-void setup() {
-
-  lcd.init();
-  lcd.backlight();
-  Serial.begin(2400);
-
-  lcd.setCursor(0, 0);      // Set the cursor on the X column and Y row.
-  lcd.print ("RPM:-");
-  lcd.setCursor(0, 1);
-  lcd.print ("Volts:-");
-  lcd.setCursor(0, 2);
-  lcd.print ("Motor:-");
-  lcd.setCursor(10, 0);
-  lcd.print ("Amps:-");
-  lcd.setCursor(10, 1);
-  lcd.print ("PwrReq:-");
-  lcd.setCursor(10, 2);
-  lcd.print ("ESC:-");
-  lcd.setCursor(0, 3);
-  lcd.print ("NO DATA");
-}
-
-void Warning_parser(uint8_t Warning_code = (msgByte_low))  {        //Warning_code values are good
+  uint32_t time_for_the_next_loop = millis();
+  uint32_t time_for_the_next_message = millis();
 
   switch (Warning_code) {
 
@@ -164,7 +138,7 @@ void Warning_parser(uint8_t Warning_code = (msgByte_low))  {        //Warning_co
   }
 }
 
-void Error_parser(uint8_t Error_code = (msgByte_low)) {        //Error_code vales are good
+void Error_parser(uint16_t Error_code) {        //Error_code vales are good
 
   switch (Error_code) {
 
@@ -193,7 +167,7 @@ void Error_parser(uint8_t Error_code = (msgByte_low)) {        //Error_code vale
       lcd.setCursor (0, 3);
       lcd.print("               ");
       lcd.setCursor (0, 3);
-      lcd.print("12V POWER!");
+      lcd.print("12V BUS!");
       break;
 
     case 0x80:
@@ -203,7 +177,7 @@ void Error_parser(uint8_t Error_code = (msgByte_low)) {        //Error_code vale
       lcd.print("HALL RESET");
       break;
 
-    case 0x00:
+    case 0x0200:      //Just like datasheet
       lcd.setCursor (0, 3);
       lcd.print("               ");
       lcd.setCursor (0, 3);
@@ -211,9 +185,9 @@ void Error_parser(uint8_t Error_code = (msgByte_low)) {        //Error_code vale
   }
 }
 
-void DisplayData (uint8_t  DataVal = (msgByte_low) + (msgByte_high * 256)) {     //Send data to display
+void DisplayData (uint8_t DataVal) {     //Send data to display
 
-  switch (packetId) {
+  switch (packet_Id) {
     case 0x01:
 
       //Print Volts
@@ -235,12 +209,12 @@ void DisplayData (uint8_t  DataVal = (msgByte_low) + (msgByte_high * 256)) {    
     case 0x03:
 
       //Print RPM
-      int RPM;
-      RPM = (DataVal * 10);
+      uint16_t rpmValue;
+      rpmValue = (DataVal * 10);
       lcd.setCursor(4, 0);
       lcd.print("   ");
       lcd.setCursor(4, 0);
-      lcd.print(RPM);
+      lcd.print(rpmValue);
       break;
 
     case 0x04:
@@ -266,7 +240,7 @@ void DisplayData (uint8_t  DataVal = (msgByte_low) + (msgByte_high * 256)) {    
       //Print Power Requested
       const int min = 0, max = 1023;
       const int span = max - min, hundred = 100.0;
-      int PwrReq_Val;
+      uint16_t PwrReq_Val;
       PwrReq_Val = hundred * (DataVal - min) / span;
       lcd.setCursor(17, 1);
       lcd.print("   ");
@@ -277,40 +251,47 @@ void DisplayData (uint8_t  DataVal = (msgByte_low) + (msgByte_high * 256)) {    
       /*case 0x0a:     Add flash function later
 
         //Run Warning function
-        lcd.setCursor (0, 3);
-        lcd.print("MOTOR TEMP!");
-        Warning_parser();
+        Warning_code = (msgByte_low + msgByte_high)
+        Warning_parser(Warning_code);
         break;
 
         case 0x0b:
 
         //Run Error function
-        Error_parser();*/
+        Error_code = (msgByte_low + msgByte_high)
+        Error_parser(Error_code);
+        break;  */
   }
 }
 
-void CRC_check (byte c) {     //CRC check
+void CRC_check (uint8_t crcVal_received) {     //CRC check, pass byte c = crcVal_received
 
-  byte crcVal_calculated = (((controllerID ^ packetId) ^ msgByte_high) ^ msgByte_low);
+  crcVal_calculated = (((controller_Id ^ packet_Id) ^ msgByte_high) ^ msgByte_low);
 
   if (crcVal_received == crcVal_calculated) {
-
-    DisplayData(c);      //Run data display loop
+    Serial.print ("Byte recieved: ");
+    Serial.print (crcVal_received, HEX);
+    Serial.print (" ");
+    uint16_t DataVal;
+    DataVal = (msgByte_low) + (msgByte_high * 256);
+    DisplayData(DataVal);      //Run data display loop
 
   } else {      //CRC failed
 
-    DATA_CORRUPTED ++;
+    Data_Corrupted ++;
 
-    if (DATA_CORRUPTED < 100) {
+    if (Data_Corrupted < 100) {
       lcd.setCursor(16, 3);
       lcd.print ("   ");
       lcd.setCursor(16, 3);
-      lcd.print(DATA_CORRUPTED);
+      lcd.print(Data_Corrupted);
     }
   }
 }
 
-void processInput (byte c) {      // Response parser
+void ProcessInput (uint8_t c) {      // Response parser
+
+  static FSM_STATES state = FSM_MAGIC_BYTE;
 
   switch (state) {
     case FSM_MAGIC_BYTE:       // Check if the first byte is the magic byte
@@ -322,7 +303,6 @@ void processInput (byte c) {      // Response parser
     case FSM_CONTROLLER_ID:     // Check if the second byte is a valid controller
       if (c == 0x00) {
         state = FSM_PACKET_ID;
-
       } else {
         state = FSM_MAGIC_BYTE;      // It isn't, return to beginning
       }
@@ -330,14 +310,9 @@ void processInput (byte c) {      // Response parser
 
     case FSM_PACKET_ID:      // Check if the third byte is a valid packet ID
       if (c <= 0x0b) {
-        packetId = c;
-        Serial.print ("Next byte: ");
-      Serial.print (packetId, HEX);
-      Serial.print (" ");
+        packet_Id = c;
         state = FSM_BYTE_LOW;
-      }
-
-      else {
+      } else {
         state = FSM_MAGIC_BYTE;     // It isn't, return to beginning
       }
       break;
@@ -347,16 +322,38 @@ void processInput (byte c) {      // Response parser
       state = FSM_BYTE_HIGH;
       break;
 
-
     case FSM_BYTE_HIGH:
       msgByte_high = c;     // Store the fifth byte and proceed to the CRC check
       state = FSM_CRC_CHECK;
       break;
 
     case FSM_CRC_CHECK:
-      crcVal_received = c;
       CRC_check(c);     //Run CRC checker
+      FSM_STATES state = FSM_MAGIC_BYTE;
+      break;
   }
+}
+
+void setup() {
+
+  lcd.init();
+  lcd.backlight();
+  Serial.begin(2400);
+
+  lcd.setCursor(0, 0);      // Set the cursor on the X column and Y row.
+  lcd.print ("RPM:-");
+  lcd.setCursor(0, 1);
+  lcd.print ("Volts:-");
+  lcd.setCursor(0, 2);
+  lcd.print ("Motor:-");
+  lcd.setCursor(10, 0);
+  lcd.print ("Amps:-");
+  lcd.setCursor(10, 1);
+  lcd.print ("PwrReq:-");
+  lcd.setCursor(10, 2);
+  lcd.print ("ESC:-");
+  lcd.setCursor(0, 3);
+  lcd.print ("NO DATA");
 }
 
 void loop () {         //Main loop
@@ -366,12 +363,13 @@ void loop () {         //Main loop
   lcd.setCursor(0, 3);
   lcd.print ("NO DATA");
 
-  while (Serial.available() > 0) {   //Check to see if anything is available in the serial receive buffer
+  if (Serial.available() > 0) {   //Check to see if anything is available in the serial receive buffer
 
-    byte c = Serial.read ();
+    uint8_t c = Serial.read ();
 
-    lcd.setCursor(0, 3);      //Clear display warning field
-    lcd.print("           ");
-    processInput (c);
+    // lcd.setCursor(0, 3);      // Set timeout clear display warning field
+    //  lcd.print("           ");
+
+    ProcessInput (c);
   }
 }
