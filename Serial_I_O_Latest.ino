@@ -185,7 +185,7 @@ void Error_parser(uint16_t Error_code) {        //Error_code vales are good
   }
 }
 
-void DisplayData (uint8_t DataVal) {     //Send data to display
+void DisplayData (uint16_t DataVal) {     //Send data to display
 
   switch (packet_Id) {
     case 0x01:
@@ -269,9 +269,6 @@ void CRC_check (uint8_t crcVal_received) {     //CRC check, pass byte c = crcVal
   crcVal_calculated = (((controller_Id ^ packet_Id) ^ msgByte_high) ^ msgByte_low);
 
   if (crcVal_received == crcVal_calculated) {
-    Serial.print ("Byte recieved: ");
-    Serial.print (crcVal_received, HEX);
-    Serial.print (" ");
     uint16_t DataVal;
     DataVal = (msgByte_low) + (msgByte_high * 256);
     DisplayData(DataVal);      //Run data display loop
@@ -295,6 +292,7 @@ void ProcessInput (uint8_t c) {      // Response parser
 
   switch (state) {
     case FSM_MAGIC_BYTE:       // Check if the first byte is the magic byte
+
       if (c == 0xfe) {
         state = FSM_CONTROLLER_ID;
       }
@@ -328,7 +326,13 @@ void ProcessInput (uint8_t c) {      // Response parser
       break;
 
     case FSM_CRC_CHECK:
+      uint8_t crcVal_received = c;
+
+      Serial.print ("Byte recieved: ");
+      Serial.print (c, HEX);
+      Serial.print (" ");
       CRC_check(c);     //Run CRC checker
+
       FSM_STATES state = FSM_MAGIC_BYTE;
       break;
   }
