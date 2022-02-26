@@ -169,11 +169,11 @@ void CRC_Check (uint8_t controllerId, uint8_t packetId, uint8_t msgByteHigh, uin
 }
 
 void Display_Data (uint8_t packetId, uint16_t DataVal) {     //Display data
-
+When I do this:
   Serial.print ("packetId: ");
   Serial.print (packetId, DEC);
   Serial.print (" ");
-
+I get packetId  = 2, but it doesn't execute the "case 0x02".  Weird?
   switch (packetId) {
     case 0x01:       //Print Volts - only gets this far
       float voltVal = (DataVal / 10.0f);
