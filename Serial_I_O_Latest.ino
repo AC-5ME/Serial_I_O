@@ -2,7 +2,7 @@
 #include <LiquidCrystal_I2C.h>
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 
-enum FSM_STATES {     //Byte parser
+enum FSM_STATES {     //Byte parser states
   FSM_MAGIC_BYTE,
   FSM_CONTROLLER_ID,
   FSM_PACKET_ID,
@@ -11,13 +11,7 @@ enum FSM_STATES {     //Byte parser
   FSM_CRC_CHECK,
 };
 
-uint8_t controller_Id;      //Bytes received
-uint8_t packet_Id;
-uint8_t msgByte_high;
-uint8_t msgByte_low;
-uint8_t crcVal_received;
-
-enum SERIAL_REQUEST {     //Display data
+enum SERIAL_REQUEST {     //Request loop states
   VOLTAGE,
   CURRENT,
   RPM,
@@ -29,50 +23,232 @@ enum SERIAL_REQUEST {     //Display data
   ERRORS,
 };
 
-uint16_t blinkPeriod = 500;     // Warning delay
-unsigned long time_now = 0;
+uint32_t time_for_the_next_loop = millis();
+uint32_t time_for_the_next_message = millis();
 
-uint8_t query1[] = {254, 00, 1, 1};     //Send request arrays
-uint8_t query2[] = {254, 00, 2, 2};
-uint8_t query3[] = {254, 00, 3, 3};
-uint8_t query4[] = {254, 00, 4, 4};
-uint8_t query5[] = {254, 00, 5, 5};
-uint8_t query6[] = {254, 00, 8, 8};
-uint8_t query7[] = {254, 00, 9, 9};
-uint8_t query8[] = {254, 00, 10, 10};
-uint8_t query9[] = {254, 00, 11, 11};
+void Request_Loop () {      //Request Loop
 
-void CRC_check (uint8_t controller_Id, uint8_t packet_Id, uint8_t msgByte_high, uint8_t msgByte_low, uint8_t crcVal_received) {     //CRC checker
+  static SERIAL_REQUEST requestState = VOLTAGE;
 
-  uint8_t  crcVal_calculated = (((controller_Id ^ packet_Id) ^ msgByte_high) ^ msgByte_low);
+  uint8_t query1[] = {254, 00, 1, 1};
+  uint8_t query2[] = {254, 00, 2, 2};
+  uint8_t query3[] = {254, 00, 3, 3};
+  uint8_t query4[] = {254, 00, 4, 4};
+  uint8_t query5[] = {254, 00, 5, 5};
+  uint8_t query6[] = {254, 00, 8, 8};
+  uint8_t query7[] = {254, 00, 9, 9};
+  uint8_t query8[] = {254, 00, 10, 10};
+  uint8_t query9[] = {254, 00, 11, 11};
 
-  if (crcVal_received == crcVal_calculated) {
-    uint16_t DataVal;
-    DataVal = (msgByte_low) + (msgByte_high * 256);
-    DisplayData(packet_Id, DataVal);      //Run data display loop
+  uint32_t time_now = millis();
 
-  } else {      //CRC failed
-    int Data_Corrupted;
-    Data_Corrupted ++;
+  if (time_now > time_for_the_next_loop) {
+    if (time_now > time_for_the_next_message) {
+      switch (requestState) {
+        case VOLTAGE:
+          Serial.write(query1, 4);
+          requestState = CURRENT;
+          break;
 
-    if (Data_Corrupted < 100) {
-      lcd.setCursor(16, 3);
-      lcd.print ("   ");
-      lcd.setCursor(16, 3);
-      lcd.print(Data_Corrupted);
+        case CURRENT:
+          Serial.write(query2, 4);
+          requestState = RPM;
+          break;
+
+        case RPM:
+          Serial.write(query3, 4);
+          requestState = ESC_TEMP;
+          break;
+
+        case ESC_TEMP:
+          Serial.write(query4, 4);
+          requestState = MOTOR_TEMP;
+          break;
+
+        case MOTOR_TEMP:
+          Serial.write(query5, 4);
+          requestState = PWR_REQ;
+          break;
+
+        case PWR_REQ:
+          Serial.write(query6, 4);
+          requestState = PWR_OUT;
+          break;
+
+        case PWR_OUT:
+          Serial.write(query7, 4);
+          requestState = WARNINGS;
+          break;
+
+        case WARNINGS:
+          Serial.write(query8, 4);
+          requestState = ERRORS;
+          break;
+
+        case ERRORS:
+          Serial.write(query9, 4);
+          requestState = VOLTAGE;
+          time_for_the_next_loop += 100;
+          break;
+      }
+      time_for_the_next_message += 50;
     }
   }
 }
 
-void Warning_parser(uint16_t Warning_code)  {        //Warning_code parser
+void Process_Input (uint8_t c) {      // Response parser
 
+  static uint8_t controllerId;      //Bytes received
+  static uint8_t packetId;
+  static uint8_t msgByteHigh;
+  static uint8_t msgByteLow;
+  static uint8_t crcValReceived;
+
+  static FSM_STATES state = FSM_MAGIC_BYTE;
+
+  switch (state) {
+    case FSM_MAGIC_BYTE:
+      if (c == 0xfe) {
+        state = FSM_CONTROLLER_ID;
+      }
+      break;
+
+    case FSM_CONTROLLER_ID:
+      if (c == 0x00) {
+        state = FSM_PACKET_ID;
+      } else {
+        state = FSM_MAGIC_BYTE;
+      }
+      break;
+
+    case FSM_PACKET_ID:
+      if (c <= 0x0b) {
+        packetId = c;
+        state = FSM_BYTE_LOW;
+      } else {
+        state = FSM_MAGIC_BYTE;
+      }
+      break;
+
+    case FSM_BYTE_LOW:
+      msgByteLow = c;
+      state = FSM_BYTE_HIGH;
+      break;
+
+    case FSM_BYTE_HIGH:
+      msgByteHigh = c;
+      state = FSM_CRC_CHECK;
+      break;
+
+    case FSM_CRC_CHECK:
+      crcValReceived = c;
+      CRC_Check (controllerId, packetId, msgByteHigh, msgByteLow, crcValReceived);     //Run CRC checker
+      state = FSM_MAGIC_BYTE;
+      break;
+  }
+}
+
+void CRC_Check (uint8_t controllerId, uint8_t packetId, uint8_t msgByteHigh, uint8_t msgByteLow, uint8_t crcValReceived) {     //CRC checker
+  uint8_t  crcValCalculated = (((controllerId ^ packetId) ^ msgByteHigh) ^ msgByteLow);
+
+  if (crcValReceived == crcValCalculated) {
+    uint16_t DataVal;
+    DataVal = (msgByteLow) + (msgByteHigh * 256);
+    Display_Data(packetId, DataVal);      //Run data display loop
+
+  } else {      //CRC failed
+    int DataCorrupted;
+    DataCorrupted ++;
+    if (DataCorrupted < 100) {
+      lcd.setCursor(16, 3);
+      lcd.print ("   ");
+      lcd.setCursor(16, 3);
+      lcd.print(DataCorrupted);
+    }
+  }
+}
+
+void Display_Data (uint8_t packetId, uint16_t DataVal) {     //Display data
+
+  Serial.print ("packetId: ");
+  Serial.print (packetId, DEC);
+  Serial.print (" ");
+
+  switch (packetId) {
+    case 0x01:       //Print Volts - only gets this far
+      float voltVal = (DataVal / 10.0f);
+      lcd.setCursor(2, 1);
+      lcd.print("        ");
+      lcd.setCursor(3, 1);
+      lcd.print(voltVal);
+      break;
+
+    case 0x02:       //Print Current
+      float currentVal = (DataVal / 10.0f);
+      lcd.setCursor(13, 1);
+      lcd.print("     ");
+      lcd.setCursor(14, 1);
+      lcd.print(currentVal);
+      break;
+
+    case 0x03:       //Print RPM
+      uint16_t rpmValue;
+      rpmValue = (DataVal * 10);
+      lcd.setCursor(4, 0);
+      lcd.print("     ");
+      lcd.setCursor(5, 0);
+      lcd.print(rpmValue);
+      break;
+
+    case 0x04:       //Print ESC temp
+      lcd.setCursor(14, 2);
+      lcd.print("   ");
+      lcd.setCursor(14, 2);
+      lcd.print(DataVal);
+      break;
+
+    case 0x05:      //Print Motor temp
+      lcd.setCursor(6, 2);
+      lcd.print("   ");
+      lcd.setCursor(6, 2);
+      lcd.print(DataVal);
+      break;
+
+    case 0x08:      //Print Power Requested
+      const int min = 0, max = 1023;
+      const int span = max - min, hundred = 100.0;
+      uint16_t PwrReqVal;
+      PwrReqVal = hundred * (DataVal - min) / span;
+      lcd.setCursor(17, 1);
+      lcd.print("   ");
+      lcd.setCursor(17, 1);
+      lcd.print(PwrReqVal);
+      break;
+
+      /*case 0x0a:     Add flash function later
+
+        //Run Warning function
+        WarningCode = (msgByteLow + msgByteHigh)
+        Warning_parser(WarningCode);
+        break;
+
+        case 0x0b:
+
+        //Run Error function
+        ErrorCode = (msgByteLow + msgByteHigh)
+        Error_parser(ErrorCode);
+        break;  */
+  }
+}
+
+void Warning_Parser(uint16_t WarningCode)  {        //Warning_code parser
+  uint32_t time_now = millis();
   uint32_t time_for_the_next_loop = millis();
   uint32_t time_for_the_next_message = millis();
 
-  switch (Warning_code) {
+  switch (WarningCode) {
 
     case 0x0001:
-      time_now = millis();
 
       if (time_now > time_for_the_next_loop) {
 
@@ -153,9 +329,9 @@ void Warning_parser(uint16_t Warning_code)  {        //Warning_code parser
   }
 }
 
-void Error_parser(uint16_t Error_code) {        //Error_code parser
+void Error_Parser(uint16_t ErrorCode) {        //Error_code parser
 
-  switch (Error_code) {
+  switch (ErrorCode) {
     case 0x0002:
       lcd.setCursor (0, 3);
       lcd.print("               ");
@@ -196,120 +372,6 @@ void Error_parser(uint16_t Error_code) {        //Error_code parser
       lcd.print("               ");
       lcd.setCursor (0, 3);
       lcd.print("MOTOR TEMP!");
-  }
-}
-
-void DisplayData (uint8_t packet_Id, uint16_t DataVal) {     //Display data
-
-  switch (packet_Id) {
-    case 0x01:       //Print Volts - only gets this far
-      float voltVal = (DataVal / 10);
-      lcd.setCursor(2, 1);
-      lcd.print("        ");
-      lcd.setCursor(3, 1);
-      lcd.print(voltVal);
-      break;
-
-    case 0x02:       //Print Current
-      float currentVal = (DataVal / 10);
-      lcd.setCursor(13, 1);
-      lcd.print("     ");
-      lcd.setCursor(14, 1);
-      lcd.print(currentVal);
-      break;
-
-    case 0x03:       //Print RPM
-      uint16_t rpmValue;
-      rpmValue = (DataVal * 10);
-      lcd.setCursor(4, 0);
-      lcd.print("     ");
-      lcd.setCursor(5, 0);
-      lcd.print(rpmValue);
-      break;
-
-    case 0x04:       //Print ESC temp
-      lcd.setCursor(14, 2);
-      lcd.print("   ");
-      lcd.setCursor(14, 2);
-      lcd.print(DataVal);
-      break;
-
-    case 0x05:      //Print Motor temp
-      lcd.setCursor(6, 2);
-      lcd.print("   ");
-      lcd.setCursor(6, 2);
-      lcd.print(DataVal);
-      break;
-
-    case 0x08:      //Print Power Requested
-      const int min = 0, max = 1023;
-      const int span = max - min, hundred = 100.0;
-      uint16_t PwrReq_Val;
-      PwrReq_Val = hundred * (DataVal - min) / span;
-      lcd.setCursor(17, 1);
-      lcd.print("   ");
-      lcd.setCursor(17, 1);
-      lcd.print(PwrReq_Val);
-      break;
-
-      /*case 0x0a:     Add flash function later
-
-        //Run Warning function
-        Warning_code = (msgByte_low + msgByte_high)
-        Warning_parser(Warning_code);
-        break;
-
-        case 0x0b:
-
-        //Run Error function
-        Error_code = (msgByte_low + msgByte_high)
-        Error_parser(Error_code);
-        break;  */
-  }
-}
-
-void ProcessInput (uint8_t c) {      // Response parser
-
-  static FSM_STATES state = FSM_MAGIC_BYTE;
-
-  switch (state) {
-    case FSM_MAGIC_BYTE:       // Check if the first byte is the magic byte
-      if (c == 0xfe) {
-        state = FSM_CONTROLLER_ID;
-      }
-      break;
-
-    case FSM_CONTROLLER_ID:     // Check if the second byte is a valid controller
-      if (c == 0x00) {
-        state = FSM_PACKET_ID;
-      } else {
-        state = FSM_MAGIC_BYTE;      // It isn't, return to beginning
-      }
-      break;
-
-    case FSM_PACKET_ID:      // Check if the third byte is a valid packet ID
-      if (c <= 0x0b) {
-        packet_Id = c;
-        state = FSM_BYTE_LOW;
-      } else {
-        state = FSM_MAGIC_BYTE;     // It isn't, return to beginning
-      }
-      break;
-
-    case FSM_BYTE_LOW:
-      msgByte_low = c;      // Store the fourth byte and proceed to the fifth
-      state = FSM_BYTE_HIGH;
-      break;
-
-    case FSM_BYTE_HIGH:
-      msgByte_high = c;     // Store the fifth byte and proceed to the CRC check
-      state = FSM_CRC_CHECK;
-      break;
-
-    case FSM_CRC_CHECK:
-      crcVal_received = c;
-      CRC_check (controller_Id, packet_Id, msgByte_high, msgByte_low, crcVal_received);     //Run CRC checker
-      state = FSM_MAGIC_BYTE;
       break;
   }
 }
@@ -336,10 +398,10 @@ void setup() {
 
 void loop () {         //Main loop
 
-  //Request loop goes here
+  //Request_Loop ();
 
   if (Serial.available() > 0) {
     uint8_t c = Serial.read ();
-    ProcessInput (c);
+    Process_Input (c);
   }
 }
