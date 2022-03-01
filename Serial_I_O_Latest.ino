@@ -185,6 +185,12 @@ void CRC_Check (uint8_t controllerId, uint8_t packetId, uint8_t msgByteHigh, uin
 void Display_Data (uint8_t packetId, uint8_t msgByteHigh, uint8_t msgByteLow, uint16_t DataVal) {     //Display data
   float voltVal = (DataVal / 10.0f);
   float currentVal = (DataVal / 10.0f);
+  const int min = 0;
+  const int max = 1023;
+  const int span = max - min;
+  const int hundred = 100;
+  int pwrReqVal = ((hundred * (DataVal - min)) / (float)span);
+  int kWInput = ((voltVal * currentVal) / 1000.0f);
   uint16_t WarningCode = (msgByteLow + msgByteHigh);
   uint16_t ErrorCode = (msgByteLow + msgByteHigh);
 
@@ -194,6 +200,11 @@ void Display_Data (uint8_t packetId, uint8_t msgByteHigh, uint8_t msgByteLow, ui
         lcd.print("        ");
         lcd.setCursor(3, 1);
         lcd.print(voltVal);
+
+        if (voltVal < 90) {
+          WarningCode = 0001;
+          Warning_Parser(WarningCode);
+        }
       } break;
 
     case 0x02: {      //Print Current
@@ -227,12 +238,6 @@ void Display_Data (uint8_t packetId, uint8_t msgByteHigh, uint8_t msgByteLow, ui
       } break;
 
     case 0x08: {      //Print Power
-        const int min = 0, max = 1023;
-        const int span = max - min, hundred = 100.0;
-        uint16_t pwrReqVal;
-        uint16_t kWInput;
-        pwrReqVal = hundred * (DataVal - min) / span;
-        kWInput = ((voltVal * currentVal) / 1000);
         lcd.setCursor(11, 0);
         lcd.print("  ");
         lcd.setCursor(11, 0);
