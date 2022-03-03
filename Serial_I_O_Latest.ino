@@ -168,8 +168,7 @@ void CRC_Check (uint8_t controllerId, uint8_t packetId, uint8_t msgByteHigh, uin
   static uint8_t DataCorrupted;
 
   if (crcValReceived == crcValCalculated) {
-    uint16_t DataVal;
-    DataVal = (msgByteLow) + (msgByteHigh * 256);
+    uint16_t DataVal = (msgByteLow) + (msgByteHigh * 256);
     Display_Data (packetId, msgByteHigh, msgByteLow, DataVal);      //Run data display loop
 
   } else {      //CRC failed
@@ -183,31 +182,30 @@ void CRC_Check (uint8_t controllerId, uint8_t packetId, uint8_t msgByteHigh, uin
   }
 }
 void Display_Data (uint8_t packetId, uint8_t msgByteHigh, uint8_t msgByteLow, uint16_t DataVal) {     //Display data
-  float voltVal = (DataVal / 10.0f);
-  float currentVal = (DataVal / 10.0f);
   const int min = 0;
   const int max = 1023;
   const int span = max - min;
   const int hundred = 100;
-  int pwrReqVal = ((hundred * (DataVal - min)) / (float)span);
-  int kWInput = ((voltVal * currentVal) / 1000.0f);
-  uint16_t WarningCode = (msgByteLow + msgByteHigh);
-  uint16_t ErrorCode = (msgByteLow + msgByteHigh);
+
+  uint16_t WarningCode = (msgByteHigh) << 8 | msgByteLow;
+  uint16_t ErrorCode = (msgByteHigh) << 8 | msgByteLow;
 
   switch (packetId) {
     case 0x01: {       //Print Volts
+        float voltVal = (DataVal / 10.0f);
         lcd.setCursor(2, 1);
         lcd.print("        ");
         lcd.setCursor(3, 1);
         lcd.print(voltVal);
 
-        if (voltVal < 90) {
+        if (voltVal > 75 && voltVal < 90 ) {      //Low volt warning
           WarningCode = 0001;
           Warning_Parser(WarningCode);
         }
       } break;
 
     case 0x02: {      //Print Current
+        float currentVal = (DataVal / 10.0f);
         lcd.setCursor(13, 1);
         lcd.print("     ");
         lcd.setCursor(14, 1);
@@ -237,15 +235,20 @@ void Display_Data (uint8_t packetId, uint8_t msgByteHigh, uint8_t msgByteLow, ui
         lcd.print(DataVal);
       } break;
 
-    case 0x08: {      //Print Power
-        lcd.setCursor(11, 0);
-        lcd.print("  ");
-        lcd.setCursor(11, 0);
-        lcd.print(kWInput);
+    case 0x08: {      //Print Power requested
+        int pwrReqVal = ((DataVal - min) / (float)span) * 100;
         lcd.setCursor(16, 0);
         lcd.print("   ");
         lcd.setCursor(16, 0);
         lcd.print(pwrReqVal);
+      } break;
+
+    case 0x09: {      //Print output Power
+        int kWOutput = ((DataVal - min) / (float)span) * 100;
+        lcd.setCursor(11, 0);
+        lcd.print("  ");
+        lcd.setCursor(11, 0);
+        lcd.print(kWOutput);
       } break;
 
     case 0x0a: {      //Warning function
@@ -496,6 +499,8 @@ void setup() {
   lcd.print ("ESC:---");
   lcd.setCursor(18, 2);
   lcd.print ("C");
+  lcd.setCursor (0, 3);
+  lcd.print("NEUTRAL?");
 }
 void loop () {         //Main loop
 
