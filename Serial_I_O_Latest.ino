@@ -129,7 +129,6 @@ void Process_Input(uint8_t c) {      // Response parser
         state = FSM_CONTROLLER_ID;
       } break;
 
-
     case FSM_CONTROLLER_ID:
       if (c == 0x00) {
         state = FSM_PACKET_ID;
@@ -183,9 +182,7 @@ void CRC_Check (uint8_t controllerId, uint8_t packetId, uint8_t msgByteHigh, uin
 }
 void Display_Data (uint8_t packetId, uint8_t msgByteHigh, uint8_t msgByteLow, uint16_t DataVal) {     //Display data
   const int min = 0;
-  const int max = 1023;
   const int span = max - min;
-  const int hundred = 100;
 
   uint16_t WarningCode = (msgByteHigh) << 8 | msgByteLow;
   uint16_t ErrorCode = (msgByteHigh) << 8 | msgByteLow;
@@ -213,8 +210,7 @@ void Display_Data (uint8_t packetId, uint8_t msgByteHigh, uint8_t msgByteLow, ui
       } break;
 
     case 0x03: {       //Print RPM
-        uint16_t rpmValue;
-        rpmValue = (DataVal * 10);
+        uint16_t rpmValue = (DataVal * 10);
         lcd.setCursor(4, 0);
         lcd.print("     ");
         lcd.setCursor(5, 0);
@@ -236,19 +232,18 @@ void Display_Data (uint8_t packetId, uint8_t msgByteHigh, uint8_t msgByteLow, ui
       } break;
 
     case 0x08: {      //Print Power requested
+        float currentVal = (DataVal / 10.0f);
+        float voltVal = (DataVal / 10.0f);
         int pwrReqVal = ((DataVal - min) / (float)span) * 100;
+        uint32_t kWInput = (((voltVal * currentVal) / 1000) + 0.5f);
+        lcd.setCursor(11, 0);
+        lcd.print("   ");
+        lcd.setCursor(11, 0);
+        lcd.print(kWInput);
         lcd.setCursor(16, 0);
         lcd.print("   ");
         lcd.setCursor(16, 0);
         lcd.print(pwrReqVal);
-      } break;
-
-    case 0x09: {      //Print output Power
-        int kWOutput = ((DataVal - min) / (float)span) * 100;
-        lcd.setCursor(11, 0);
-        lcd.print("  ");
-        lcd.setCursor(11, 0);
-        lcd.print(kWOutput);
       } break;
 
     case 0x0a: {      //Warning function
@@ -469,7 +464,6 @@ void Motor_Flasher() {
           lcd.print("      ");
           lcd.setCursor (0, 3);
           lcd.print("                  ");
-
           isFlashOn = true;
         }
       }
@@ -503,9 +497,7 @@ void setup() {
   lcd.print("NEUTRAL?");
 }
 void loop () {         //Main loop
-
   Request_Loop ();
-
   Voltage_Flasher();
   Current_Flasher();
   ESC_Flasher();
