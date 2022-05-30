@@ -300,6 +300,12 @@ void Display_Data (uint8_t packetId, uint8_t msgByteHigh, uint8_t msgByteLow, ui
           SD_File.println(", ");
           SD_File.close();
         }
+        else {
+          SD_File = SD.open("ESC.log", FILE_WRITE);
+          SD_File.print("%PWR: ---");
+          SD_File.println(", ");
+          SD_File.close();
+        }
       } break;
 
     case 0x0a: {      //Warning function
@@ -332,8 +338,10 @@ void Warning_Parser(uint16_t WarningCode)  {        //Warning_code parser
       } break;
 
     case 0x0002: {
-        isCurrentWarning = true;
-        flashTimeout = millis() + 3000;
+        if (millis() > 6000) {
+          isCurrentWarning = true;
+          flashTimeout = millis() + 3000;
+        }
       } break;
 
     case 0x0004: {
