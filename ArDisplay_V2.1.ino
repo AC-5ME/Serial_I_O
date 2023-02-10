@@ -7,11 +7,11 @@
 
 hd44780_I2Cexp lcd; //Declare lcd object: auto locate & auto config expander chip
 
-File SD_File;      //SD card logger
+File SD_File;      //SD card declaration
 
 RTC_DS1307 rtc;
 
-char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};     //SD logger
 
 enum FSM_STATES {     //Byte parser states
   FSM_MAGIC_BYTE,
@@ -181,7 +181,7 @@ void CRC_Check (uint8_t controllerId, uint8_t packetId, uint8_t msgByteHigh, uin
 
   if (crcValReceived == crcValCalculated) {
     uint16_t DataVal = (msgByteLow) + (msgByteHigh * 256);
-    Display_Data (packetId, msgByteHigh, msgByteLow, DataVal);      //Data display function
+    Display_Data (packetId, msgByteHigh, msgByteLow, DataVal);
 
   } else {      //CRC failed
     DataCorrupted ++;
@@ -210,7 +210,7 @@ void Display_Data (uint8_t packetId, uint8_t msgByteHigh, uint8_t msgByteLow, ui
   static int voltVal;
   static int currentVal;
   static int filterCurrentVal;
-  static int kWInput;
+  //static int kWInput;
 
   uint16_t WarningCode = (msgByteHigh) << 8 | msgByteLow;
   uint16_t ErrorCode = (msgByteHigh) << 8 | msgByteLow;
@@ -235,8 +235,8 @@ void Display_Data (uint8_t packetId, uint8_t msgByteHigh, uint8_t msgByteLow, ui
         SD_File.close();
 
         if (voltVal > 75 && voltVal < 90 ) {      //Low volt warning
-          WarningCode = 0001;
-          Warning_Parser(WarningCode);
+          isVoltageWarning = true;
+          flashTimeout = millis() + 3000;
         }
       } break;
 
@@ -271,59 +271,71 @@ void Display_Data (uint8_t packetId, uint8_t msgByteHigh, uint8_t msgByteLow, ui
 
     case 0x04: {       //Print ESC temp
         uint8_t escTemp = DataVal;
+
+        char buffer[5];
+        sprintf(buffer, "%uC", escTemp);
+
         lcd.setCursor(15, 2);
         lcd.print("   ");
         lcd.setCursor(15, 2);
-        lcd.print(escTemp);
+        lcd.print(buffer);
 
         SD_File = SD.open("ESC.log", FILE_WRITE);
         SD_File.print("ESC(C): ");
-        SD_File.print(escTemp);
+        SD_File.print(buffer);
         SD_File.print(", ");
         SD_File.close();
 
         if (escTemp > 80) {      //ESC temp warning
-          WarningCode = 0004;
-          Warning_Parser(WarningCode);
+          isESCTempWarning = true;
+          flashTimeout = millis() + 3000;
         }
       } break;
 
     case 0x05: {      //Print Motor temp
         uint8_t motorTemp = DataVal;
+
+        char buffer[5];
+        sprintf(buffer, "%uC", motorTemp);
+
         lcd.setCursor(6, 2);
         lcd.print("   ");
         lcd.setCursor(6, 2);
-        lcd.print(motorTemp);
+        lcd.print(buffer);
 
         SD_File = SD.open("ESC.log", FILE_WRITE);
         SD_File.print("MOTOR(C): ");
-        SD_File.print(motorTemp);
+        SD_File.print(buffer);
         SD_File.print(", ");
         SD_File.close();
 
         if (motorTemp > 110) {      //Motor temp warning
-          WarningCode = 16;     //Hex = 0010
-          Warning_Parser(WarningCode);
+          isMotorTempWarning = true;
+          flashTimeout = millis() + 3000;
         }
       } break;
 
     case 0x08: {      //Print Power requested
         if (DataVal >= 128 && DataVal <= 230) {
-          int pwrReqVal = ((DataVal - min) / (float)span) * 100;
+          uint8_t pwrReqVal = ((DataVal - min) / (float)span) * 100;
+
+          char buffer[5];
+          sprintf(buffer, "%u%%", pwrReqVal);
+
           lcd.setCursor(16, 0);
-          lcd.print("   ");
+          lcd.print("    ");
           lcd.setCursor(16, 0);
-          lcd.print(pwrReqVal);
+          lcd.print(buffer);
 
           SD_File = SD.open("ESC.log", FILE_WRITE);
-          SD_File.print("%PWR: ");
-          SD_File.print(pwrReqVal);
+          SD_File.print("THROTTLE: ");
+          SD_File.print(buffer);
           SD_File.println(", ");
           SD_File.close();
         }
         else {
           SD_File = SD.open("ESC.log", FILE_WRITE);
-          SD_File.print("%PWR: ---");
+          SD_File.print("THROTTLE: ---");
           SD_File.println(", ");
           SD_File.close();
         }
@@ -338,29 +350,29 @@ void Display_Data (uint8_t packetId, uint8_t msgByteHigh, uint8_t msgByteLow, ui
       } break;
   }
 
-  kWInput = ((voltVal * filterCurrentVal) / 100);
-  lcd.setCursor(11, 0);
-  lcd.print("  ");
-  lcd.setCursor(11, 0);
-  lcd.print(kWInput);
+  /* kWInput = ((voltVal * filterCurrentVal) / 100);
+    lcd.setCursor(10, 0);
+    lcd.print("   ");
+    lcd.setCursor(10, 0);
+    lcd.print(kWInput);
+  */
 }
 
 void Warning_Parser(uint16_t WarningCode)  {        //Warning_code parser
   switch (WarningCode) {
     case 0x0000: {      //No warnings
         isNoWarnings = true;
-        if (isNoWarnings && isNoErrors == true) {
-          lcd.setCursor (0, 3);
-          lcd.print("                  ");
-        } break;
-      }
+        lcd.setCursor (0, 3);
+        lcd.print("                    ");
+      } break;
+
     case 0x0001: {
         isVoltageWarning = true;
         flashTimeout = millis() + 3000;
       } break;
 
     case 0x0002: {
-        if (millis() > 6000) {      //Wait to stabilize
+        if (millis() > 2000) {      //Wait to stabilize
           isCurrentWarning = true;
           flashTimeout = millis() + 3000;
         }
@@ -382,74 +394,72 @@ void Error_Parser(uint16_t ErrorCode) {        //Error_code parser
   switch (ErrorCode) {
     case 0x0000: {     //No errors
         isNoErrors = true;
-        if (isNoWarnings && isNoErrors == true) {
-          lcd.setCursor (0, 3);
-          lcd.print("                  ");
-        } break;
+        lcd.setCursor (0, 3);
+        lcd.print("                    ");
+      } break;
 
-      case 0x0001: {
-          lcd.setCursor (0, 3);
-          lcd.print("SIGNAL LOST!      ");
+    case 0x0001: {
+        lcd.setCursor (0, 3);
+        lcd.print("SIGNAL LOST!      ");
 
-          SD_File = SD.open("ESC.log", FILE_WRITE);
-          SD_File.println("SIGNAL LOST!,");
-          SD_File.close();
-        } break;
+        SD_File = SD.open("ESC.log", FILE_WRITE);
+        SD_File.println("SIGNAL LOST!,");
+        SD_File.close();
+      } break;
 
-      case 0x0002: {
-          lcd.setCursor (0, 3);
-          lcd.print("NEUTRAL?          ");
+    case 0x0002: {
+        lcd.setCursor (0, 3);
+        lcd.print("NEUTRAL?          ");
 
-          SD_File = SD.open("ESC.log", FILE_WRITE);
-          SD_File.println("NEUTRAL?,");
-          SD_File.close();
-        } break;
+        SD_File = SD.open("ESC.log", FILE_WRITE);
+        SD_File.println("NEUTRAL?,");
+        SD_File.close();
+      } break;
 
-      case 0x0008: {
-          lcd.setCursor (0, 3);
-          lcd.print("MEMORY FAIL!     ");
+    case 0x0008: {
+        lcd.setCursor (0, 3);
+        lcd.print("MEMORY FAIL!     ");
 
-          SD_File = SD.open("ESC.log", FILE_WRITE);
-          SD_File.println("MEMORY FAIL!,");
-          SD_File.close();
-        } break;
+        SD_File = SD.open("ESC.log", FILE_WRITE);
+        SD_File.println("MEMORY FAIL!,");
+        SD_File.close();
+      } break;
 
-      case 0x0020: {
-          lcd.setCursor (0, 3);
-          lcd.print("HAll SENSOR!      ");
+    case 0x0020: {
+        lcd.setCursor (0, 3);
+        lcd.print("HAll SENSOR!      ");
 
-          SD_File = SD.open("ESC.log", FILE_WRITE);
-          SD_File.println("HALL SENSOR!,");
-          SD_File.close();
-        } break;
+        SD_File = SD.open("ESC.log", FILE_WRITE);
+        SD_File.println("HALL SENSOR!,");
+        SD_File.close();
+      } break;
 
-      case 0x0040: {
-          lcd.setCursor (0, 3);
-          lcd.print("12V BUS!          ");
+    case 0x0040: {
+        lcd.setCursor (0, 3);
+        lcd.print("12V BUS!          ");
 
-          SD_File = SD.open("ESC.log", FILE_WRITE);
-          SD_File.println("12V BUS!,");
-          SD_File.close();
-        } break;
+        SD_File = SD.open("ESC.log", FILE_WRITE);
+        SD_File.println("12V BUS!,");
+        SD_File.close();
+      } break;
 
-      case 0x0080: {
-          lcd.setCursor (0, 3);
-          lcd.print("HALL RESET!       ");
+    case 0x0080: {
+        lcd.setCursor (0, 3);
+        lcd.print("HALL RESET!       ");
 
-          SD_File = SD.open("ESC.log", FILE_WRITE);
-          SD_File.println("HALL RESET!,");
-          SD_File.close();
-        } break;
+        SD_File = SD.open("ESC.log", FILE_WRITE);
+        SD_File.println("HALL RESET!,");
+        SD_File.close();
+      } break;
 
-      case 0x0200: {
-          lcd.setCursor (0, 3);
-          lcd.print("MOTOR TEMP SENSOR!");
+    case 0x0200: {
+        lcd.setCursor (0, 3);
+        lcd.print("MOTOR TEMP SENSOR!");
 
-          SD_File = SD.open("ESC.log", FILE_WRITE);
-          SD_File.println("MOTOR TEMP SENSOR!,");
-          SD_File.close();
-        } break;
-      }
+        SD_File = SD.open("ESC.log", FILE_WRITE);
+        SD_File.println("MOTOR TEMP SENSOR!,");
+        SD_File.close();
+      } break;
   }
 }
 
@@ -614,26 +624,21 @@ void setup() {
   lcd.begin(20, 4);
 
   Serial1.begin(2400);
-  Serial.begin(2400);     //Debug
 
-  lcd.setCursor(0, 0);      // Set the cursor on the X column and Y row.
+  delay (2000);     //Allow start-up delay
+
+  lcd.setCursor(0, 0);      //Set cursor on the X column and Y row.
   lcd.print ("RPM: ----");
   lcd.setCursor(0, 1);
   lcd.print ("V: ---");
   lcd.setCursor(0, 2);
   lcd.print ("Motor:---");
-  lcd.setCursor(9, 2);
-  lcd.print ("C");
-  lcd.setCursor(11, 0);
-  lcd.print("- kW");
   lcd.setCursor(16, 0);
   lcd.print("---%");
   lcd.setCursor(11, 1);
   lcd.print ("A: ---");
   lcd.setCursor(11, 2);
   lcd.print ("ESC:---");
-  lcd.setCursor(18, 2);
-  lcd.print ("C");
   lcd.setCursor (0, 3);
   lcd.print("CHECK THROTTLE    ");
 
@@ -671,16 +676,14 @@ void setup() {
 }
 
 void loop () {         //Main loop
-  if (millis() > 2000) {
-    Request_Loop ();
-    Voltage_Flasher();
-    Current_Flasher();
-    ESC_Flasher();
-    Motor_Flasher();
+  Request_Loop ();
+  Voltage_Flasher();
+  Current_Flasher();
+  ESC_Flasher();
+  Motor_Flasher();
 
-    if (Serial1.available() > 0) {
-      uint8_t c = Serial1.read ();
-      Process_Input (c);
-    }
+  if (Serial1.available() > 0) {
+    uint8_t c = Serial1.read ();
+    Process_Input (c);
   }
 }
