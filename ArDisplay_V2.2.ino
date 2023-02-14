@@ -46,6 +46,9 @@ static bool isNoErrors = false;
 static uint32_t flashTimeout;
 static uint32_t time_for_the_next_flash = millis();
 
+unsigned long AmpHours;      //Ah counter
+unsigned long lastSampleMillis;
+
 void Request_Loop() {      //Request Loop
   static SERIAL_REQUEST requestState = VOLTAGE;
 
@@ -196,8 +199,9 @@ void Display_Data (uint8_t& packetId, uint8_t& msgByteHigh, uint8_t& msgByteLow,
 
   float alpha = 0.3;     //Current smoothing factor - 0.5 does little, lower is smoother
 
+  static float lastAmpSample = 0;
   static int voltVal;
-  static int currentVal;
+  static float currentVal;
   static int filterCurrentVal;
   //static int kWInput;
 
@@ -230,18 +234,40 @@ void Display_Data (uint8_t& packetId, uint8_t& msgByteHigh, uint8_t& msgByteLow,
       } break;
 
     case 0x02: {      //Print Current
-        currentVal = (DataVal / 10.0f);
+        currentVal = (DataVal / 10.0);
         filterCurrentVal = alpha * (currentVal) + (1 - alpha) * filterCurrentVal;
         lcd.setCursor(13, 1);
         lcd.print("     ");
         lcd.setCursor(14, 1);
         lcd.print(filterCurrentVal);
 
+        unsigned long currentMillis = millis();
+        float averageAmps = (lastAmpSample + filterCurrentVal) / 2.0;
+        lastAmpSample = currentVal;
+        unsigned long newAmpHours = averageAmps * (currentMillis - lastSampleMillis);
+         Serial.print("(newAmpHours): ");
+        Serial.print(newAmpHours);
+      
+        Serial.print(" time elapsed: ");
+        Serial.print((currentMillis - lastSampleMillis));
+        lastSampleMillis = currentMillis;
+        AmpHours += newAmpHours;
+
         SD_File = SD.open("ESC.log", FILE_WRITE);
         SD_File.print("A: ");
         SD_File.print(filterCurrentVal);
         SD_File.print(", ");
         SD_File.close();
+
+
+       
+        Serial.print(" currentVal: ");
+        Serial.print(currentVal);
+        Serial.print(" averageAmps: ");
+        Serial.print(averageAmps);
+        Serial.print(" AmpHours: ");
+        Serial.println(AmpHours);
+
       } break;
 
     case 0x03: {       //Print RPM
@@ -322,12 +348,6 @@ void Display_Data (uint8_t& packetId, uint8_t& msgByteHigh, uint8_t& msgByteLow,
           SD_File.println(", ");
           SD_File.close();
         }
-        // else {
-        SD_File = SD.open("ESC.log", FILE_WRITE);
-        SD_File.print("THROTTLE: ---");
-        SD_File.println(", ");
-        SD_File.close();
-        //}
       } break;
 
     case 0x0a: {      //Warning function
@@ -617,8 +637,9 @@ void setup() {
   lcd.begin(20, 4);
 
   Serial1.begin(2400);
+  Serial.begin (2400);
 
-  delay (1000);     //Allow start-up delay
+  delay (500);     //Allow start-up delay
 
   lcd.setCursor(0, 0);      //Set cursor on the X column and Y row.
   lcd.print ("RPM: ----");
