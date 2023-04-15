@@ -46,7 +46,8 @@ static bool isNoErrors = false;
 static uint32_t flashTimeout;
 static uint32_t time_for_the_next_flash = millis();
 
-unsigned long startMillis;     //Ah counter
+float AmpMilliHours = 0.0;      //Ah counter
+unsigned long lastSampleMillis = 0;
 
 void Request_Loop() {      //Request Loop
   static SERIAL_REQUEST requestState = VOLTAGE;
@@ -201,9 +202,9 @@ void Display_Data (uint8_t& packetId, uint8_t& msgByteHigh, uint8_t& msgByteLow,
   static int voltVal;
   static float currentVal;
   static int filterCurrentVal;
-  float totalCoulumbs = 0.0;      //Ah counter
-  float AmpHours = 0.0;
-  unsigned long currentMillis;
+
+  float AmpHours = 0.0;     //Ah counter
+  static int lastAmpSample = 0;
 
   uint16_t WarningCode = (msgByteHigh) << 8 | msgByteLow;
   uint16_t ErrorCode = (msgByteHigh) << 8 | msgByteLow;
@@ -219,6 +220,7 @@ void Display_Data (uint8_t& packetId, uint8_t& msgByteHigh, uint8_t& msgByteLow,
         lcd.print(voltVal);
 
         SD_File = SD.open("ESC.log", FILE_WRITE);
+        SD_File.println();
         SD_File.print("ms: ");
         SD_File.print(timeStamp);
         SD_File.print(", ");
@@ -235,28 +237,36 @@ void Display_Data (uint8_t& packetId, uint8_t& msgByteHigh, uint8_t& msgByteLow,
 
     case 0x02: {      //Print Current
         currentVal = (DataVal / 10.0);
-        //filterCurrentVal = alpha * (currentVal) + (1 - alpha) * filterCurrentVal;
-        filterCurrentVal = 2400;
+        filterCurrentVal = alpha * (currentVal) + (1 - alpha) * filterCurrentVal;
 
         lcd.setCursor(13, 1);
         lcd.print("     ");
         lcd.setCursor(14, 1);
         lcd.print(filterCurrentVal);
 
-        currentMillis = millis();
-        Serial.print(currentMillis - startMillis);
+        unsigned long currentMillis = millis();
 
-        if ((currentMillis - startMillis) >= 1000)  //1 coulumb = 1A * 1 second
-        {
-          totalCoulumbs = totalCoulumbs + filterCurrentVal;
-          Serial.print("Total Coulumbs = ");
-          Serial.println(totalCoulumbs);
-          Serial.print("Total Ah = ");
-          Serial.println(totalCoulumbs / 3600.0);
-          startMillis = currentMillis;      //Reset Ah counter
-        }
+        float averageAmps = (lastAmpSample + filterCurrentVal) / 2.0;
+        lastAmpSample = filterCurrentVal;
+        float newAmpMilliHours = averageAmps * (currentMillis - lastSampleMillis);
 
-        AmpHours = (totalCoulumbs / 3600.0);
+        AmpMilliHours += newAmpMilliHours;
+        float AmpHours = (AmpMilliHours / 3600000);
+
+        /*
+                Serial.print(" time elapsed: ");
+                Serial.print((currentMillis - lastSampleMillis));
+                Serial.print(" filterCurrentVal: ");
+                Serial.print(filterCurrentVal);
+                Serial.print(" averageAmps: ");
+                Serial.print(averageAmps);
+                Serial.print(" AmpMilliHours: ");
+                Serial.print(AmpMilliHours);
+                Serial.print(" Ah: ");
+                Serial.println(AmpHours);
+        */
+
+        lastSampleMillis = currentMillis;     //Reset Ah counter
 
         SD_File = SD.open("ESC.log", FILE_WRITE);
         SD_File.print("A: ");
@@ -343,7 +353,7 @@ void Display_Data (uint8_t& packetId, uint8_t& msgByteHigh, uint8_t& msgByteLow,
           SD_File = SD.open("ESC.log", FILE_WRITE);
           SD_File.print("THROTTLE: ");
           SD_File.print(buffer);
-          SD_File.println(", ");
+          SD_File.print(", ");
           SD_File.close();
         }
       } break;
@@ -357,7 +367,6 @@ void Display_Data (uint8_t& packetId, uint8_t& msgByteHigh, uint8_t& msgByteLow,
       } break;
   }
 }
-
 
 void Warning_Parser(uint16_t& WarningCode)  {        //Warning_code parser
   switch (WarningCode) {
@@ -629,11 +638,8 @@ void setup() {
   lcd.begin(20, 4);
 
   Serial1.begin(2400);
-  Serial.begin(2400);     //Debug
 
   delay (500);     //Allow start-up delay
-
-  startMillis = millis();     //Ah counter
 
   lcd.setCursor(0, 0);      //Set cursor on the X column and Y row.
   lcd.print ("RPM: ----");
