@@ -24,17 +24,27 @@ static bool isNoErrors = false;
 static uint32_t flashTimeout;
 static uint32_t time_for_the_next_flash = millis();
 
+int rpmDisplay = 0;
+int voltDisplay = 0;
+int ampDisplay = 0;
+float WhDisplay = 0.0;
+float WhchargedDisplay = 0.0;
+int escTempDisplay = 0;
+int motorTempDisplay = 0;
+int dutyCycleDisplay = 0;
+
 uint32_t next_request = millis();     //Request loop delay
 
 void Get_Data() {
   if (UART.getVescValues()) {       //Acquire data from VESC
-    int rpmDisplay = (UART.data.rpm);
-    int voltDisplay = (UART.data.inpVoltage);
-    int ampDisplay = (UART.data.avgInputCurrent);
-    float WhDisplay = (UART.data.wattHours);
-    int escTempDisplay = (UART.data.tempMosfet);
-    int motorTempDisplay = (UART.data.tempMotor);
-    int dutyCycleDisplay = (UART.data.dutyCycleNow);
+    rpmDisplay = (UART.data.rpm);
+    voltDisplay = (UART.data.inpVoltage);
+    ampDisplay = (UART.data.avgInputCurrent);
+    WhDisplay = (UART.data.wattHours);
+    WhchargedDisplay = (UART.data.wattHoursCharged);
+    escTempDisplay = (UART.data.tempMosfet);
+    motorTempDisplay = (UART.data.tempMotor);
+    dutyCycleDisplay = (UART.data.dutyCycleNow);
   }
   else
   {
@@ -94,12 +104,19 @@ void Display_Data(int rpmDisplay, int voltDisplay, int ampDisplay, float WhDispl
   SD_File.print("Wh: ");
   SD_File.print(WhDisplay);
   SD_File.print(", ");
+
+  SD_File.print("WhCh: ");
+  SD_File.print(WhchargedDisplay);
+  SD_File.print(", ");
   SD_File.close();
+
+  char buffer[5];
+  sprintf(buffer, "%uC", escTempDisplay);
 
   lcd.setCursor(15, 2);      //Print ESC temp
   lcd.print("   ");
   lcd.setCursor(15, 2);
-  lcd.print(escTempDisplay);
+  lcd.print(buffer);
 
   if (escTempDisplay > 80) {      //ESC temp warning
     isESCTempWarning = true;
@@ -108,7 +125,7 @@ void Display_Data(int rpmDisplay, int voltDisplay, int ampDisplay, float WhDispl
 
   SD_File = SD.open("ESC.log", FILE_WRITE);
   SD_File.print("ESC: ");
-  SD_File.print(escTempDisplay);
+  SD_File.print(buffer);
   SD_File.print(", ");
   SD_File.close();
 
@@ -358,13 +375,6 @@ void setup() {
 }
 
 void loop () {         //Main loop
-  int rpmDisplay;
-  int voltDisplay;
-  int ampDisplay;
-  float WhDisplay;
-  int escTempDisplay;
-  int motorTempDisplay;
-  int dutyCycleDisplay;
 
   uint32_t time_now = millis();
 
