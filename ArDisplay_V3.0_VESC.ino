@@ -110,13 +110,13 @@ void Display_Data(int rpmDisplay, int voltDisplay, int ampDisplay, float WhDispl
   SD_File.print(", ");
   SD_File.close();
 
-  char buffer[5];
-  sprintf(buffer, "%uC", escTempDisplay);
+  char escTempBuffer[5];
+  sprintf(escTempBuffer, "%uC", escTempDisplay);
 
   lcd.setCursor(15, 2);      //Print ESC temp
   lcd.print("   ");
   lcd.setCursor(15, 2);
-  lcd.print(buffer);
+  lcd.print(escTempBuffer);
 
   if (escTempDisplay > 80) {      //ESC temp warning
     isESCTempWarning = true;
@@ -125,14 +125,17 @@ void Display_Data(int rpmDisplay, int voltDisplay, int ampDisplay, float WhDispl
 
   SD_File = SD.open("ESC.log", FILE_WRITE);
   SD_File.print("ESC: ");
-  SD_File.print(buffer);
+  SD_File.print(escTempBuffer);
   SD_File.print(", ");
   SD_File.close();
 
-  lcd.setCursor(6, 2);      //Print motor temp
+  char motorTempBuffer[5];
+  sprintf(motorTempBuffer, "%uC", motorTempDisplay);
+
+  lcd.setCursor(6, 2);
   lcd.print("   ");
   lcd.setCursor(6, 2);
-  lcd.print(motorTempDisplay);
+  lcd.print(motorTempBuffer);
 
   if (motorTempDisplay > 110) {      //Motor temp warning
     isMotorTempWarning = true;
@@ -141,18 +144,21 @@ void Display_Data(int rpmDisplay, int voltDisplay, int ampDisplay, float WhDispl
 
   SD_File = SD.open("ESC.log", FILE_WRITE);
   SD_File.print("MOTOR: ");
-  SD_File.print(motorTempDisplay);
+  SD_File.print(motorTempBuffer);
   SD_File.print(", ");
   SD_File.close();
+
+  char throttlePosBuffer[5];
+  sprintf(throttlePosBuffer, "%u%%", dutyCycleDisplay);
 
   lcd.setCursor(16, 0);      //Print throttle %
   lcd.print("    ");
   lcd.setCursor(16, 0);
-  lcd.print(dutyCycleDisplay);
+  lcd.print(throttlePosBuffer);
 
   SD_File = SD.open("ESC.log", FILE_WRITE);
   SD_File.print("THROTTLE: ");
-  SD_File.print(dutyCycleDisplay);
+  SD_File.print(throttlePosBuffer);
   SD_File.print(", ");
   SD_File.close();
 }
