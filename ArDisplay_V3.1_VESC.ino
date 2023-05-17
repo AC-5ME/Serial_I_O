@@ -104,13 +104,14 @@ void Display_Data(int rpmDisplay, int voltDisplay, int ampDisplay, float WhDispl
     SD_File.print(", ");
     SD_File.close();
   */
-  char escTempBuffer[5];
+  //char escTempBuffer[5];
   //sprintf(escTempBuffer, "%uC", escTempDisplay);
 
   lcd.setCursor(15, 2);      //Print ESC temp
   lcd.print("   ");
   lcd.setCursor(15, 2);
-  lcd.print(escTempBuffer);
+  //lcd.print(escTempBuffer);
+  lcd.print(escTempDisplay);
 
   if (escTempDisplay > 80) {      //ESC temp warning
     isESCTempWarning = true;
@@ -123,13 +124,14 @@ void Display_Data(int rpmDisplay, int voltDisplay, int ampDisplay, float WhDispl
     SD_File.print(", ");
     SD_File.close();
   */
-  char motorTempBuffer[5];
+  //char motorTempBuffer[5];
   //sprintf(motorTempBuffer, "%uC", motorTempDisplay);
 
   lcd.setCursor(6, 2);
   lcd.print("   ");
   lcd.setCursor(6, 2);
-  lcd.print(motorTempBuffer);
+  //lcd.print(motorTempBuffer);
+  lcd.print(motorTempDisplay);
 
   if (motorTempDisplay > 110) {      //Motor temp warning
     isMotorTempWarning = true;
@@ -142,13 +144,15 @@ void Display_Data(int rpmDisplay, int voltDisplay, int ampDisplay, float WhDispl
     SD_File.print(", ");
     SD_File.close();
   */
-  char throttlePosBuffer[5];
+  //char throttlePosBuffer[5];
   //sprintf(throttlePosBuffer, "%u%%", dutyCycleDisplay);
 
   lcd.setCursor(16, 0);      //Print throttle %
   lcd.print("    ");
   lcd.setCursor(16, 0);
-  lcd.print(throttlePosBuffer);
+  //lcd.print(throttlePosBuffer);
+  lcd.print(dutyCycleDisplay);
+
   /*
     SD_File = SD.open("ESC.log", FILE_WRITE);
     SD_File.print("THROTTLE: ");
@@ -315,12 +319,12 @@ void Motor_Flasher() {
 }
 
 void setup() {
-  Serial1.begin(19200);
+  delay (500);      //Stabilization delay
+
+  Serial1.begin(115200);
 
   UART.setSerialPort(&Serial1);       //Define which port to use as UART
-  while (!Serial) {
-    ;
-  }
+  // while (!Serial1) { ; }
 
   lcd.begin();
   lcd.backlight();
@@ -345,13 +349,13 @@ void loop () {         //Main loop
 
   uint32_t time_now = millis();
 
-  //if (time_now > next_request) {
+  if (time_now > next_request) {
     Get_Data();
-   // next_request += 1000;
- // }
+    next_request += 500;
+  }
 
   Display_Data (rpmDisplay, voltDisplay, ampDisplay, WhDisplay, escTempDisplay, motorTempDisplay, dutyCycleDisplay);
-  Voltage_Flasher();
+  // Voltage_Flasher();
   Current_Flasher();
   ESC_Flasher();
   Motor_Flasher();
