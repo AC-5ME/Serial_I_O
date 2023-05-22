@@ -19,16 +19,9 @@ bool isCurrentWarning = false;
 bool isESCTempWarning = false;
 bool isMotorTempWarning = false;
 bool isEscFault = false;
-static bool isFaults = false;
-static uint32_t flashTimeout;
-static uint32_t time_for_the_next_flash = millis();
+bool isFaults = false;
 
-const int flashCount = 3; // Number of times to flash the LED
-const int flashDuration = 1000; // Duration of each flash in milliseconds
-const int interval = 1000; // Interval between flash sequences in millis
-unsigned long previousTime = 0; // Variable to store the previous timestamp
-int flashIndex = 0; // Variable to track the current flash index
-int escFaultTime = 0;     //ESC fault time-out
+int faultTime = 0;     //Fault time-out
 
 int erpmRx = 0;
 int voltDisplay = 0;
@@ -86,10 +79,12 @@ void Display_Data(int erpmRx, int voltDisplay, int ampDisplay, float WhDisplay, 
 
   if (voltDisplay < 30) {      //Low volt warning (28S X 3V0)
     isVoltageWarning = true;
-    flashTimeout = millis() + 3000;
+    isFaults = true;
+    faultTime = millis();
   } else {
 
     isVoltageWarning = false;
+    isFaults = false;
   }
 
   SD_File = SD.open("ESC.log", FILE_WRITE);
@@ -105,7 +100,12 @@ void Display_Data(int erpmRx, int voltDisplay, int ampDisplay, float WhDisplay, 
 
   if (ampDisplay > 350) {      //High current warning
     isCurrentWarning = true;
-    flashTimeout = millis() + 3000;
+    isFaults = true;
+    faultTime = millis();
+  } else {
+
+    isCurrentWarning = false;
+    isFaults = false;
   }
 
   SD_File = SD.open("ESC.log", FILE_WRITE);
@@ -129,7 +129,12 @@ void Display_Data(int erpmRx, int voltDisplay, int ampDisplay, float WhDisplay, 
 
   if (escTempDisplay > 80) {      //ESC temp warning
     isESCTempWarning = true;
-    flashTimeout = millis() + 3000;
+    isFaults = true;
+    faultTime = millis();
+  } else {
+
+    isESCTempWarning = false;
+    isFaults = false;
   }
 
   SD_File = SD.open("ESC.log", FILE_WRITE);
@@ -145,7 +150,12 @@ void Display_Data(int erpmRx, int voltDisplay, int ampDisplay, float WhDisplay, 
 
   if (motorTempDisplay > 110) {      //Motor temp warning
     isMotorTempWarning = true;
-    flashTimeout = millis() + 3000;
+    isFaults = true;
+    faultTime = millis();
+  } else {
+
+    isMotorTempWarning = false;
+    isFaults = false;
   }
 
   SD_File = SD.open("ESC.log", FILE_WRITE);
@@ -172,13 +182,7 @@ void Display_Data(int erpmRx, int voltDisplay, int ampDisplay, float WhDisplay, 
   if (faultCode > 0) {      //ESC fault warning
     isEscFault = true;
     isFaults = true;
-    escFaultTime = millis();
-
-    SD_File = SD.open("ESC.log", FILE_WRITE);
-    SD_File.print("ESC FAULT: ");
-    SD_File.print(faultCode);
-    SD_File.println(", ");
-    SD_File.close();
+    faultTime = millis();
   } else {
 
     isEscFault = false;
@@ -189,159 +193,49 @@ void Display_Data(int erpmRx, int voltDisplay, int ampDisplay, float WhDisplay, 
 void Voltage_Flasher() {
   if (isVoltageWarning == true) {
 
-    unsigned long currentTime = millis();
-
-    if (currentTime - previousTime >= flashDuration) {
-      previousTime = currentTime;
-
-      if (flashIndex % 2 == 0) {
-        lcd.setCursor (0, 1);
-        lcd.print("V:");
-        lcd.setCursor (0, 3);
-        lcd.print("LOW VOLTAGE!      ");
-      } else {
-
-        lcd.setCursor (0, 1);
-        lcd.print("  ");
-        lcd.setCursor (0, 3);
-        lcd.print("                    ");
-      }
-
-      flashIndex++;     // Increment the flash index
-
-      if (flashIndex == flashCount * 2) {     //Sequence complete?
-        flashIndex = 0;     // Reset the flash index
-      }
-    }
-  } else {
-    lcd.setCursor (0, 1);
-    lcd.print("V:");
     lcd.setCursor (0, 3);
-    lcd.print("                    ");
+    lcd.print("LOW VOLTAGE!        ");
   }
+
+  SD_File = SD.open("ESC.log", FILE_WRITE);
+  SD_File.println("LOW VOLTAGE!,");
+  SD_File.close();
 }
 
 void Current_Flasher() {
-  uint32_t now = millis();
-
   if (isCurrentWarning == true) {
 
-    isFaults = true;      //Set for Fault_Checker()
-
-    if (now > flashTimeout) {
-      isCurrentWarning = false;
-      lcd.setCursor(11, 1);
-      lcd.print ("A:");
-
-    } else {
-      static bool isFlashOn = false;
-
-      if (now > time_for_the_next_flash) {
-        time_for_the_next_flash += 1000;
-
-        if (isFlashOn == true) {
-          lcd.setCursor(11, 1);
-          lcd.print ("A:");
-          lcd.setCursor (0, 3);
-          lcd.print("HIGH CURRENT!     ");
-          isFlashOn = false;
-
-          SD_File = SD.open("ESC.log", FILE_WRITE);
-          SD_File.println("HIGH CURRENT!,");
-          SD_File.close();
-
-        } else {
-          lcd.setCursor (11, 1);
-          lcd.print("  ");
-          lcd.setCursor (0, 3);
-          lcd.print("                  ");
-          isFlashOn = true;
-        }
-      }
-    }
+    lcd.setCursor (0, 3);
+    lcd.print("HIGH CURRENT!       ");
   }
+
+  SD_File = SD.open("ESC.log", FILE_WRITE);
+  SD_File.println("HIGH CURRENT!,");
+  SD_File.close();
 }
 
 void ESC_Flasher() {
-  uint32_t now = millis();
+  if (isVoltageWarning == true) {
 
-  if (isESCTempWarning == true) {
-
-    isFaults = true;      //Set for Fault_Checker()
-
-    if (now > flashTimeout) {
-      isESCTempWarning = false;
-      lcd.setCursor(11, 2);
-      lcd.print ("ESC:");
-    } else {
-
-      static bool isFlashOn = false;
-
-      if (now > time_for_the_next_flash) {
-        time_for_the_next_flash += 1000;
-
-        if (isFlashOn == true) {
-          lcd.setCursor(11, 2);
-          lcd.print ("ESC:");
-          lcd.setCursor (0, 3);
-          lcd.print("ESC TEMP!         ");
-          isFlashOn = false;
-
-          SD_File = SD.open("ESC.log", FILE_WRITE);
-          SD_File.println("ESC TEMP!,");
-          SD_File.close();
-
-        } else {
-          lcd.setCursor (11, 2);
-          lcd.print("    ");
-          lcd.setCursor (0, 3);
-          lcd.print("                  ");
-          isFlashOn = true;
-        }
-      }
-    }
+    lcd.setCursor (0, 3);
+    lcd.print("LOW VOLTAGE!        ");
   }
+
+  SD_File = SD.open("ESC.log", FILE_WRITE);
+  SD_File.println("LOW VOLTAGE!,");
+  SD_File.close();
 }
 
 void Motor_Flasher() {
-  uint32_t now = millis();
+  if (isESCTempWarning == true) {
 
-  if (isMotorTempWarning == true) {
-
-    isFaults = true;      //Set for Fault_Checker()
-
-    if (now > flashTimeout) {
-      isMotorTempWarning = false;
-      lcd.setCursor(0, 2);
-      lcd.print ("Motor:");
-
-    } else {
-      static bool isFlashOn = false;
-
-      if (now > time_for_the_next_flash) {
-        time_for_the_next_flash += 1000;
-
-        if (isFlashOn == true) {
-          lcd.setCursor(0, 2);
-          lcd.print ("Motor:");
-          lcd.setCursor (0, 3);
-          lcd.print("MOTOR TEMP!       ");
-          isFlashOn = false;
-
-          SD_File = SD.open("ESC.log", FILE_WRITE);
-          SD_File.println("MOTOR TEMP!,");
-          SD_File.close();
-
-        } else {
-          lcd.setCursor (0, 2);
-          lcd.print("      ");
-          lcd.setCursor (0, 3);
-          lcd.print("                  ");
-          isFlashOn = true;
-        }
-      }
-    }
+    lcd.setCursor (0, 3);
+    lcd.print("ESC TEMP!           ");
   }
+
+  SD_File = SD.open("ESC.log", FILE_WRITE);
+  SD_File.print("ESC TEMP!, ");
+  SD_File.close();
 }
 
 void ESC_Fault_Flasher() {
@@ -351,15 +245,11 @@ void ESC_Fault_Flasher() {
     lcd.print("ESC FAULT!         ");
   }
 
-  if (isFaults == false) {
-    unsigned long currentTime = millis();
-
-    if (currentTime - escFaultTime >= 2000) {
-
-      lcd.setCursor (0, 3);
-      lcd.print("                    ");
-    }
-  }
+  SD_File = SD.open("ESC.log", FILE_WRITE);
+  SD_File.print("ESC FAULT: ");
+  SD_File.print(faultCode);
+  SD_File.println(", ");
+  SD_File.close();
 }
 
 void setup() {
@@ -439,9 +329,19 @@ void loop () {
     next_request += 500;
   }
 
-  //Voltage_Flasher();
+  Voltage_Flasher();
   Current_Flasher();
   ESC_Flasher();
   Motor_Flasher();
   ESC_Fault_Flasher();
+
+  if (isFaults == false) {      //Clear message time-out
+    unsigned long currentTime = millis();
+
+    if (currentTime - faultTime >= 2000) {
+
+      lcd.setCursor (0, 3);
+      lcd.print("                    ");
+    }
+  }
 }
