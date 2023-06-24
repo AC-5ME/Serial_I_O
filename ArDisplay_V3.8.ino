@@ -9,7 +9,7 @@
 
 VescUart UART;      //Declarations
 File SD_File;
-RTC_DS1307 rtc;
+RTC_PCF8523 rtc;
 LCD_I2C lcd(0x27, 20, 4);
 
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};     //SD logger
@@ -35,6 +35,11 @@ float dutyCycleDisplay = 0.0;
 int faultCode = 0;
 
 uint32_t next_request = 0;     //Request loop delay
+
+void Print_Screen() {
+  lcd.setCursor(0, 2);
+  lcd.print ("Motor:");
+}
 
 void Get_Data() {
   if (UART.getVescValues()) {
@@ -97,7 +102,7 @@ void Display_Data(int erpmRx, int voltDisplay, int ampDisplay, float WhDisplay, 
   SD_File.print(voltDisplay);
   SD_File.print(", ");
   SD_File.close();
-    
+
   lcd.setCursor(14, 1);     //Print current
   lcd.print("   ");
   lcd.setCursor(14, 1);
@@ -365,6 +370,7 @@ void loop () {
   uint32_t time_now = millis();
 
   if (time_now > next_request) {
+    Print_Screen();     //Refresh screen
     Get_Data();
     Display_Data (erpmRx, voltDisplay, ampDisplay, WhDisplay, escTempDisplay, motorTempDisplay, dutyCycleDisplay, faultCode);
     next_request += 500;
